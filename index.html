@@ -1,0 +1,464 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>NULLRELAY / Tactics</title>
+<style>
+  :root { --bg:#090f16; --panel:#101923; --edge:#2b3c4c; --text:#e1eaf2; --muted:#9bafbf; --cyan:#72e4df; --pink:#ff83a6; --green:#9ee1aa; color-scheme:dark }
+  * { box-sizing:border-box }
+  body { margin:0; background:radial-gradient(ellipse at 40% 0%, #142533, var(--bg) 55%); color:var(--text); font:14px/1.5 system-ui,sans-serif }
+  main { width:min(1040px, 100%); margin:auto; padding:clamp(14px, 3vw, 32px) }
+  header { display:flex; justify-content:space-between; align-items:end; gap:12px; border-bottom:1px solid var(--edge); padding-bottom:14px; margin-bottom:16px }
+  h1,h2,p { margin:0 }
+  h1 { font:800 clamp(23px, 4vw, 39px)/1.05 system-ui,sans-serif; letter-spacing:-.035em }
+  h1 span { color:var(--cyan) }
+  .label, h2, .tag, kbd { font:700 11px/1.4 ui-monospace,monospace; text-transform:uppercase; letter-spacing:.11em }
+  .label { color:var(--muted) }
+  .tag { color:var(--cyan); text-align:right }
+  .layout { display:grid; grid-template-columns:minmax(0, 1fr) minmax(230px, 300px); gap:14px; align-items:start }
+  .panel { background:var(--panel); border:1px solid var(--edge); border-radius:8px; padding:12px }
+  .deck { display:grid; gap:9px }
+  .deck-head, .actions, .row { display:flex; justify-content:space-between; align-items:center; gap:8px }
+  .deck-head { flex-wrap:wrap }
+  aside { display:grid; gap:10px }
+  h2 { color:var(--cyan); margin-bottom:7px }
+  .deck-head h2 { margin:0 }
+  .viewport { position:relative; width:min(100%, 61vh); width:min(100%, 61svh); margin:auto }
+  canvas { display:block; width:100%; height:auto; background:#0b1118; image-rendering:pixelated }
+  #deck { border:1px solid #394e5e; touch-action:manipulation }
+  #minimap { width:min(100%, 136px); margin:10px auto 4px; border:1px solid var(--edge) }
+  .legend { color:var(--muted); display:flex; gap:14px; flex-wrap:wrap; font-size:12px }
+  .legend span::before { content:""; width:7px; height:7px; display:inline-block; background:var(--marker); margin-right:5px; vertical-align:1px }
+  .actions { flex-wrap:wrap; margin-top:3px }
+  .buttons, .movement { display:flex; gap:5px }
+  button { cursor:pointer; background:#1b2b39; border:1px solid #40576a; border-radius:4px; padding:7px 10px; color:var(--text); font:inherit; font-weight:650 }
+  button:hover { background:#254054 }
+  button:focus-visible { outline:2px solid var(--cyan); outline-offset:2px }
+  button:disabled { opacity:.45; cursor:default }
+  .movement button { min-width:35px; padding-inline:6px }
+  kbd { color:var(--cyan) }
+  .help, .detail { color:var(--muted); font-size:12px }
+  #notice { color:#ffe1a2; min-height:1.5em; font-size:12px }
+  .numbers { display:grid; grid-template-columns:1fr 1fr; gap:8px }
+  .numbers div { background:#0b121b; padding:7px 9px; border-radius:4px }
+  .numbers strong { display:block; font:700 23px/1.2 ui-monospace,monospace }
+  #remaining { color:var(--pink) }
+  .gear { display:grid; gap:5px; margin-top:8px }
+  meter { display:block; width:100%; height:12px; accent-color:var(--cyan) }
+  #log { list-style:none; margin:0; padding:0; color:var(--muted); font-size:12px }
+  #log li + li { border-top:1px solid #253442; margin-top:4px; padding-top:4px }
+  #log li:first-child { color:var(--text) }
+  #result { position:absolute; inset:0; display:grid; place-content:center; text-align:center; padding:12px; background:#080e16e8 }
+  #result[hidden] { display:none }
+  #result strong { color:var(--cyan); font-size:clamp(20px, 5vw, 35px) }
+  @media (max-width:700px) {
+    .layout { grid-template-columns:minmax(0,1fr) }
+    .viewport { width:min(100%, 62svh) }
+    aside { grid-template-columns:repeat(2,minmax(0,1fr)) }
+    .log-panel { grid-column:1/-1 }
+  }
+  @media (max-width:365px) { aside { grid-template-columns:1fr } }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <div><p class="label">Station operations / field prototype</p><h1>NULLRELAY <span>TACTICS</span></h1></div>
+    <p class="tag">DECK 091<br>LOCAL LINK</p>
+  </header>
+  <div class="layout">
+    <section class="panel deck" aria-labelledby="deck-title">
+      <div class="deck-head"><h2 id="deck-title">01 / Tactical view</h2><span class="label" id="round"></span></div>
+      <div class="viewport">
+        <canvas id="deck" width="640" height="640" aria-label="Tactical grid. Click or tap a visible Reclaimed to fire."></canvas>
+        <div id="result" role="status" hidden><strong></strong><p>Use Restart to run the deck again.</p></div>
+      </div>
+      <div class="legend">
+        <span style="--marker:var(--cyan)">Hacker</span>
+        <span style="--marker:var(--green)">Crew</span>
+        <span style="--marker:var(--pink)">Reclaimed</span>
+      </div>
+      <div class="actions">
+        <div class="movement" aria-label="Movement">
+          <button type="button" data-move="w" aria-label="Move north (W)">↑</button>
+          <button type="button" data-move="a" aria-label="Move west (A)">←</button>
+          <button type="button" data-move="s" aria-label="Move south (S)">↓</button>
+          <button type="button" data-move="d" aria-label="Move east (D)">→</button>
+        </div>
+        <div class="buttons">
+          <button type="button" id="pass">Pass <kbd>Space</kbd></button>
+          <button type="button" id="restart">Restart</button>
+        </div>
+      </div>
+      <p class="help"><kbd>W A S D</kbd> to step or bump. Bump crew to talk or Reclaimed to strike. Click a visible Reclaimed to shoot.</p>
+      <p id="notice" role="status"></p>
+    </section>
+    <aside aria-label="Station and operator status">
+      <section class="panel">
+        <h2>02 / Station status</h2>
+        <div class="numbers">
+          <div><strong id="kills">0</strong><span class="label">Killed</span></div>
+          <div><strong id="remaining">0</strong><span class="label">Remaining</span></div>
+        </div>
+        <canvas id="minimap" width="128" height="128" aria-label="Station minimap"></canvas>
+      </section>
+      <section class="panel">
+        <h2>03 / Operator</h2>
+        <p><strong>Vale</strong> <span class="detail">/ Intrusion tech</span></p>
+        <div class="row"><span class="label">Integrity</span><strong id="hp"></strong></div>
+        <meter id="health" min="0" value="0" aria-label="Operator integrity"></meter>
+        <div class="gear">
+          <div><span class="label">Weapon</span><br><strong id="weapon"></strong><br><span id="weapon-detail" class="detail"></span></div>
+          <div><span class="label">Armor</span><br><strong id="armor"></strong><br><span id="armor-detail" class="detail"></span></div>
+        </div>
+      </section>
+      <section class="panel log-panel">
+        <h2>04 / Comms</h2>
+        <ul id="log" aria-live="polite"></ul>
+      </section>
+    </aside>
+  </div>
+</main>
+<script>
+"use strict";
+
+// Original NULLRELAY_091 deck from 4rg43n/hello-world-game.
+const DECK = [
+  "1111111111111111", "1000000000000001", "1011100111000001", "1000100001000001",
+  "1000100001002201", "1000000000002001", "1000000000002001", "1000111000000001",
+  "1000100000111001", "1000100000100001", "1000000000100001", "1000000000000001",
+  "1000330000000001", "1000030000000001", "1000000000000001", "1111111111111111",
+];
+const INFESTED = new Set(["4,4", "4,7", "5,7", "6,7", "10,8", "11,8", "12,8", "4,12", "5,12", "12,5", "12,6"]);
+const STEPS = { w: [0, -1], a: [-1, 0], s: [0, 1], d: [1, 0] };
+const DIRECTIONS = Object.values(STEPS);
+const PISTOL = { name: "Arc pistol", range: 6, damage: 4 };
+const JACKET = { name: "Mesh jacket", protection: 1 };
+const CARBINE = { name: "Security carbine", range: 4, damage: 3 };
+
+function newGame() {
+  return {
+    player: { name: "Vale", x: 3, y: 5, hp: 24, maxHp: 24, melee: 3, weapon: PISTOL, armor: JACKET },
+    crew: [
+      { name: "Mira", x: 2, y: 5, bark: "Bulkheads stop rounds. Make them come to you." },
+      { name: "Ivo", x: 2, y: 12, bark: "That's station security under all that growth." },
+    ],
+    enemies: [
+      { name: "Reclaimed 01", x: 5, y: 3, hp: 6, maxHp: 6, melee: 3 },
+      { name: "Reclaimed 02", x: 11, y: 3, hp: 8, maxHp: 8, melee: 3, weapon: CARBINE },
+      { name: "Reclaimed 03", x: 7, y: 10, hp: 6, maxHp: 6, melee: 3 },
+      { name: "Reclaimed 04", x: 13, y: 12, hp: 8, maxHp: 8, melee: 3, weapon: CARBINE },
+    ],
+    turn: 1,
+    status: "active",
+    log: ["Mira: Station security has gone Reclaimed. Clear the deck."],
+    effects: [],
+  };
+}
+
+const cellKey = (x, y) => `${x},${y}`;
+const wallAt = (x, y) => DECK[y]?.[x] !== "0";
+const distance = (a, b) => Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
+const alive = (game) => game.enemies.filter(enemy => enemy.hp > 0);
+const actorAt = (actors, x, y) => actors.find(actor => actor.x === x && actor.y === y);
+
+// Traverse crossed grid cells from center to center. Walls touching a crossed
+// corner block the shot, so both sides agree on whether a line is clear.
+function lineOfSight(from, to) {
+  const width = Math.abs(to.x - from.x);
+  const height = Math.abs(to.y - from.y);
+  const stepX = Math.sign(to.x - from.x);
+  const stepY = Math.sign(to.y - from.y);
+  let { x, y } = from;
+  let crossedX = 0;
+  let crossedY = 0;
+  while (x !== to.x || y !== to.y) {
+    const nextX = (2 * crossedX + 1) * height;
+    const nextY = (2 * crossedY + 1) * width;
+    if (nextX === nextY && (wallAt(x + stepX, y) || wallAt(x, y + stepY))) return false;
+    if (nextX <= nextY) {
+      x += stepX;
+      crossedX++;
+    }
+    if (nextY <= nextX) {
+      y += stepY;
+      crossedY++;
+    }
+    if (wallAt(x, y)) return false;
+  }
+  return true;
+}
+
+function logEvent(game, message) {
+  game.log.unshift(message);
+  game.log.length = Math.min(game.log.length, 6);
+}
+
+function attack(game, attacker, target, ranged) {
+  const raw = ranged ? attacker.weapon.damage : attacker.melee;
+  const damage = Math.max(1, raw - (target.armor?.protection ?? 0));
+  target.hp = Math.max(0, target.hp - damage);
+  game.effects.push({ from: { x: attacker.x, y: attacker.y }, to: { x: target.x, y: target.y }, ranged, hostile: attacker !== game.player });
+  logEvent(game, `${attacker.name} ${ranged ? "shoots" : "strikes"} ${target.name} · ${damage} damage.${target.hp === 0 ? " Down." : ""}`);
+}
+
+// Breadth-first search finds the first step of the shortest walk to the
+// player's tile. The goal itself stays occupied and can never be entered.
+function pursuitStep(game, enemy) {
+  const blocked = new Set([...game.crew, ...alive(game)].map(actor => cellKey(actor.x, actor.y)));
+  const queue = [{ x: enemy.x, y: enemy.y, first: null }];
+  for (let index = 0; index < queue.length; index++) {
+    const { x, y, first } = queue[index];
+    for (const [dx, dy] of DIRECTIONS) {
+      const next = { x: x + dx, y: y + dy };
+      if (distance(next, game.player) === 0) return first;
+      const key = cellKey(next.x, next.y);
+      if (wallAt(next.x, next.y) || blocked.has(key)) continue;
+      blocked.add(key);
+      queue.push({ ...next, first: first ?? next });
+    }
+  }
+  return null;
+}
+
+function enemyAttack(game, enemy) {
+  const range = distance(enemy, game.player);
+  if (range === 1) {
+    attack(game, enemy, game.player, false);
+    return true;
+  }
+  if (enemy.weapon && range <= enemy.weapon.range && lineOfSight(enemy, game.player)) {
+    attack(game, enemy, game.player, true);
+    return true;
+  }
+  return false;
+}
+
+function finishTurn(game) {
+  for (const enemy of alive(game)) {
+    if (enemyAttack(game, enemy)) {
+      if (game.player.hp === 0) break;
+      continue;
+    }
+    const step = pursuitStep(game, enemy);
+    if (!step) continue;
+    Object.assign(enemy, step);
+    enemyAttack(game, enemy);
+    if (game.player.hp === 0) break;
+  }
+
+  if (game.player.hp === 0) {
+    game.status = "lost";
+    logEvent(game, "Operator link lost.");
+  } else if (alive(game).length === 0) {
+    game.status = "won";
+    logEvent(game, "Mira: All clear. The deck is ours.");
+  } else {
+    game.turn++;
+  }
+}
+
+// Resolve a single player action and its NPC phase. A returned message
+// describes a rejected input, which spends no turn.
+function takeAction(game, action) {
+  if (game.status !== "active") return null;
+  const player = game.player;
+  if (action.type === "step") {
+    const [dx, dy] = STEPS[action.key];
+    const x = player.x + dx;
+    const y = player.y + dy;
+    if (wallAt(x, y)) return "Bulkhead blocks movement.";
+    const friendly = actorAt(game.crew, x, y);
+    const enemy = actorAt(alive(game), x, y);
+    game.effects = [];
+    if (friendly) logEvent(game, `${friendly.name}: ${friendly.bark}`);
+    else if (enemy) attack(game, player, enemy, false);
+    else Object.assign(player, { x, y });
+  } else if (action.type === "shoot") {
+    const target = actorAt(alive(game), action.x, action.y);
+    if (!target || !lineOfSight(player, target)) return "No visible hostile on that tile.";
+    if (distance(player, target) > player.weapon.range) return "Target is out of range.";
+    game.effects = [];
+    attack(game, player, target, true);
+  } else {
+    game.effects = [];
+    logEvent(game, "Vale holds position.");
+  }
+  finishTurn(game);
+  return null;
+}
+
+// Canvas rendering and browser input.
+const byId = id => document.getElementById(id);
+const deckCanvas = byId("deck");
+const mapCanvas = byId("minimap");
+const deckContext = deckCanvas.getContext("2d");
+const mapContext = mapCanvas.getContext("2d");
+const tile = deckCanvas.width / DECK[0].length;
+const miniTile = mapCanvas.width / DECK[0].length;
+const COLORS = { hacker: "#72e4df", crew: "#9ee1aa", enemy: "#ff83a6" };
+let game = newGame();
+let effectTimer;
+
+function drawTile(x, y, type) {
+  const px = x * tile;
+  const py = y * tile;
+  const ctx = deckContext;
+  if (type === "0") {
+    ctx.fillStyle = (x + y) % 2 ? "#192733" : "#1b2935";
+    ctx.fillRect(px, py, tile, tile);
+    ctx.strokeStyle = "#253644";
+    ctx.strokeRect(px + .5, py + .5, tile, tile);
+    if ((x * 13 + y * 7) % 11 === 0) {
+      ctx.fillStyle = "#2a404e";
+      ctx.fillRect(px + 3, py + 4, 8, 2);
+      ctx.fillRect(px + 3, py + 8, 5, 2);
+    }
+  } else {
+    const infested = INFESTED.has(cellKey(x, y));
+    ctx.fillStyle = "#101820";
+    ctx.fillRect(px, py, tile, tile);
+    ctx.fillStyle = infested ? "#452b3c" : "#283847";
+    ctx.fillRect(px + 3, py + 3, tile - 6, tile - 7);
+    ctx.fillStyle = infested ? "#71435d" : "#405568";
+    ctx.fillRect(px + 4, py + 4, tile - 8, 3);
+    ctx.fillStyle = "#17242e";
+    ctx.fillRect(px + 6, py + 15, tile - 12, 12);
+    ctx.fillStyle = infested ? "#bd577e" : type === "2" ? "#58b8bb" : "#536c7b";
+    ctx.fillRect(px + 10, py + 19, tile - 20, 2);
+  }
+  mapContext.fillStyle = type === "0" ? "#283c4d" : "#101720";
+  mapContext.fillRect(x * miniTile, y * miniTile, miniTile, miniTile);
+}
+
+function drawActor(actor, role) {
+  const ctx = deckContext;
+  const x = actor.x * tile;
+  const y = actor.y * tile;
+  const color = COLORS[role];
+  const targetable = role === "enemy" && distance(game.player, actor) <= game.player.weapon.range;
+  ctx.fillStyle = "#0a1018";
+  ctx.fillRect(x + 7, y + 11, 26, 21);
+  ctx.fillStyle = color;
+  ctx.fillRect(x + 10, y + 16, 20, 12);
+  ctx.fillRect(x + 15, y + 8, 10, 15);
+  ctx.fillStyle = "#122430";
+  ctx.fillRect(x + 17, y + 11, 6, 3);
+  ctx.fillRect(x + 14, y + 23, 12, 3);
+  if (actor.weapon) {
+    ctx.fillStyle = "#a9b9c8";
+    ctx.fillRect(x + 29, y + 15, 4, 11);
+  }
+  if (targetable || role === "hacker") {
+    ctx.strokeStyle = color;
+    ctx.strokeRect(x + 3.5, y + 3.5, tile - 7, tile - 7);
+  }
+  if (role === "enemy") {
+    ctx.fillStyle = "#090f16";
+    ctx.fillRect(x + 9, y + 31, 22, 3);
+    ctx.fillStyle = color;
+    ctx.fillRect(x + 9, y + 31, 22 * actor.hp / actor.maxHp, 3);
+  }
+  mapContext.fillStyle = color;
+  mapContext.fillRect(actor.x * miniTile + 2, actor.y * miniTile + 2, miniTile - 4, miniTile - 4);
+}
+
+function draw() {
+  deckContext.lineWidth = 1;
+  DECK.forEach((row, y) => Array.from(row).forEach((type, x) => drawTile(x, y, type)));
+  for (const actor of game.crew) drawActor(actor, "crew");
+  for (const enemy of alive(game)) {
+    if (lineOfSight(game.player, enemy)) drawActor(enemy, "enemy");
+  }
+  drawActor(game.player, "hacker");
+  for (const { from, to, ranged, hostile } of game.effects) {
+    const ctx = deckContext;
+    ctx.strokeStyle = hostile ? COLORS.enemy : "#fff2a9";
+    ctx.lineWidth = 2;
+    if (ranged) {
+      ctx.beginPath();
+      ctx.moveTo((from.x + .5) * tile, (from.y + .5) * tile);
+      ctx.lineTo((to.x + .5) * tile, (to.y + .5) * tile);
+      ctx.stroke();
+    }
+    ctx.strokeRect(to.x * tile + 5, to.y * tile + 5, tile - 10, tile - 10);
+  }
+}
+
+function render() {
+  draw();
+  const { player, enemies, turn, status } = game;
+  const remaining = alive(game).length;
+  byId("round").textContent = `Turn ${turn} / ${status === "active" ? "Your move" : "Link closed"}`;
+  byId("kills").textContent = enemies.length - remaining;
+  byId("remaining").textContent = remaining;
+  byId("hp").textContent = `${player.hp} / ${player.maxHp}`;
+  byId("health").max = player.maxHp;
+  byId("health").value = player.hp;
+  byId("weapon").textContent = player.weapon.name;
+  byId("weapon-detail").textContent = `${player.weapon.damage} damage · ${player.weapon.range}-tile range`;
+  byId("armor").textContent = player.armor.name;
+  byId("armor-detail").textContent = `Absorbs ${player.armor.protection} damage per hit`;
+  byId("log").replaceChildren(...game.log.map(message => {
+    const item = document.createElement("li");
+    item.textContent = message;
+    return item;
+  }));
+  const result = byId("result");
+  result.hidden = status === "active";
+  result.querySelector("strong").textContent = status === "won" ? "Deck clear" : "Operator down";
+  byId("pass").disabled = status !== "active";
+  for (const button of document.querySelectorAll("[data-move]")) button.disabled = status !== "active";
+}
+
+function act(action) {
+  if (game.status !== "active") return;
+  const notice = takeAction(game, action);
+  byId("notice").textContent = notice ?? "";
+  if (notice) return;
+  clearTimeout(effectTimer);
+  render();
+  if (game.effects.length) {
+    effectTimer = setTimeout(() => {
+      game.effects = [];
+      draw();
+    }, 190);
+  }
+}
+
+document.addEventListener("keydown", event => {
+  if (event.ctrlKey || event.metaKey || event.altKey) return;
+  const key = event.key.toLowerCase();
+  if (key === " " && event.target instanceof HTMLButtonElement) return;
+  if (key !== " " && !Object.hasOwn(STEPS, key)) return;
+  event.preventDefault();
+  if (event.repeat) return;
+  act(key === " " ? { type: "pass" } : { type: "step", key });
+});
+
+deckCanvas.addEventListener("click", event => {
+  const bounds = deckCanvas.getBoundingClientRect();
+  const x = Math.floor((event.clientX - bounds.left - deckCanvas.clientLeft) * DECK[0].length / deckCanvas.clientWidth);
+  const y = Math.floor((event.clientY - bounds.top - deckCanvas.clientTop) * DECK.length / deckCanvas.clientHeight);
+  act({ type: "shoot", x, y });
+});
+for (const button of document.querySelectorAll("[data-move]")) {
+  button.addEventListener("click", event => {
+    act({ type: "step", key: button.dataset.move });
+    if (event.detail) button.blur();
+  });
+}
+byId("pass").addEventListener("click", () => act({ type: "pass" }));
+byId("restart").addEventListener("click", () => {
+  clearTimeout(effectTimer);
+  game = newGame();
+  byId("notice").textContent = "";
+  render();
+  byId("restart").blur();
+});
+render();
+</script>
+</body>
+</html>
