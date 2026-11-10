@@ -10,3 +10,7 @@ Open `index.html` in a browser. The game runs from the file and needs no install
 - Clear all four Reclaimed before Vale's integrity reaches zero.
 
 Project notes are in [GDD.md](GDD.md), [ARCHITECTURE.md](ARCHITECTURE.md), and [AGENTS.md](AGENTS.md).
+
+Page build at:
+https://4rg43n.github.io/hw-tactics/
+
